@@ -1,0 +1,58 @@
+:root {
+  font-family: 'Roboto', system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #121212;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+.ql-toolbar {
+  background-color: #1e1e1e !important;
+  border-color: #333 !important;
+}
+
+.ql-container {
+  background-color: #1e1e1e !important;
+  border-color: #333 !important;
+  color: rgba(255, 255, 255, 0.87) !important;
+  min-height: 300px;
+}
+
+.ql-picker, .ql-picker-label {
+  color: rgba(255, 255, 255, 0.87) !important;
+}
+
+.ql-picker-options {
+  background-color: #1e1e1e !important;
+  color: rgba(255, 255, 255, 0.87) !important;
+}
+
+.ql-snow.ql-toolbar button, .ql-snow .ql-toolbar button {
+  color: rgba(255, 255, 255, 0.87) !important;
+}
+
+.ql-snow .ql-stroke {
+  stroke: rgba(255, 255, 255, 0.87) !important;
+}
+
+.ql-snow .ql-fill {
+  fill: rgba(255, 255, 255, 0.87) !important;
+} 
