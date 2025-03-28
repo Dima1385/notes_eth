@@ -16,17 +16,14 @@ import {
   DialogTitle,
   DialogContent,
   DialogContentText,
-  DialogActions,
-  Chip,
-  Tooltip
+  DialogActions
 } from '@mui/material';
 import { 
   Save as SaveIcon, 
   ArrowBack as ArrowBackIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Close as CloseIcon,
-  InfoOutlined as InfoIcon
+  Close as CloseIcon
 } from '@mui/icons-material';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
@@ -60,20 +57,24 @@ export default function NoteEditor() {
   const location = useLocation();
   const { 
     notes, 
+    loading, 
+    error: notesError, 
+    clearError,
     createNote, 
     saveNote, 
     startEditNote, 
     saveEditedNote, 
-    deleteNote,
-    loading,
-    error: notesError,
-    clearError: clearNotesError
+    deleteNote 
   } = useNotes();
-  const { isContractValid, error: web3Error } = useWeb3();
+  const { 
+    notesContract, 
+    error: web3Error, 
+    isContractValid 
+  } = useWeb3();
   
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [editMode, setEditMode] = useState(id ? false : true);
+  const [isEditMode, setIsEditMode] = useState(id ? false : true);
   const [viewOnly, setViewOnly] = useState(location.state?.viewOnly || false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -81,126 +82,203 @@ export default function NoteEditor() {
   const [currentAction, setCurrentAction] = useState(null);
   const [currentFee, setCurrentFee] = useState('0');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [feesInfo, setFeesInfo] = useState({
-    createFee: '',
-    saveFee: '',
-    editFee: '',
-    saveEditFee: ''
-  });
-
-  // Single error handling for the component
-  const error = errorMessage || notesError || web3Error;
+  const [localError, setLocalError] = useState(null);
   
-  // Handle errors from context or local state
-  useEffect(() => {
-    if (notesError) {
-      setErrorMessage(notesError);
-    } else if (web3Error && isContractValid) {
-      setErrorMessage(web3Error);
-    }
-  }, [notesError, web3Error, isContractValid]);
-
-  // Find the note if we're editing an existing one
-  useEffect(() => {
-    if (id && notes.length > 0) {
-      const note = notes.find(note => note.id === parseInt(id));
-      if (note) {
-        setTitle(note.title);
-        setContent(note.content);
-      }
-    }
-  }, [id, notes]);
-
-  // Clear any error when component unmounts
+  // Determine which error to display (priority: local error, notes error, web3 error if contract is valid)
+  const displayError = localError || notesError || (isContractValid ? web3Error : null);
+  
+  // Clean up errors when component unmounts
   useEffect(() => {
     return () => {
-      clearNotesError();
-      setErrorMessage('');
+      if (clearError) clearError();
+      setLocalError(null);
     };
-  }, [clearNotesError]);
+  }, [clearError]);
+  
+  // Check if we're editing an existing note or creating a new one
+  const isNewNote = !id;
+  
+  // Find the current note if we're editing
+  const currentNote = id ? notes.find(note => note.id === id) : null;
 
-  // Format fee amounts for display
-  const formatFee = (feeInEth) => {
-    return `${feeInEth} ETH`;
+  // Load the note data if we're editing an existing note
+  useEffect(() => {
+    if (currentNote) {
+      setTitle(currentNote.title);
+      setContent(currentNote.content);
+    }
+  }, [currentNote]);
+
+  // Get fee amount for the specified action
+  const getFeeAmount = async (action) => {
+    if (!notesContract) {
+      setLocalError('Contract not accessible');
+      return '0';
+    }
+    
+    try {
+      let fee;
+      switch(action) {
+        case 'create':
+          fee = await notesContract.createNoteFee();
+          break;
+        case 'save':
+          fee = await notesContract.saveNoteFee();
+          break;
+        case 'edit':
+          fee = await notesContract.editNoteFee();
+          break;
+        case 'saveEdit':
+          fee = await notesContract.saveEditFee();
+          break;
+        default:
+          fee = '0';
+      }
+      
+      return ethers.utils.formatEther(fee);
+    } catch (err) {
+      console.error('Error getting fee:', err);
+      setLocalError(`Error getting fee information: ${err.message}`);
+      return '0';
+    }
   };
 
-  const handleTitleChange = (e) => {
-    setTitle(e.target.value);
+  // Handle starting edit mode
+  const handleStartEdit = async () => {
+    setLocalError(null);
+    const fee = await getFeeAmount('edit');
+    if (localError) return; // If there was an error getting fee, stop here
+    
+    setCurrentFee(fee);
+    setCurrentAction('edit');
+    setFeeDialogOpen(true);
   };
 
-  const handleContentChange = (e) => {
-    setContent(e.target.value);
+  // Handle confirming edit mode
+  const handleConfirmEdit = async () => {
+    setFeeDialogOpen(false);
+    
+    try {
+      const success = await startEditNote(id);
+      if (success) {
+        setIsEditMode(true);
+        setSnackbarMessage('Edit mode activated');
+        setSnackbarOpen(true);
+      } else {
+        setLocalError('Failed to enter edit mode');
+      }
+    } catch (err) {
+      setLocalError(`Error: ${err.message || 'Unknown error'}`);
+    }
   };
 
+  // Handle saving the note
   const handleSave = async () => {
     if (!title.trim()) {
-      setErrorMessage('Please enter a title for your note');
+      setLocalError('Please enter a title');
       return;
     }
+    
+    setLocalError(null);
+    let fee;
+    let action;
+    
+    if (isNewNote) {
+      fee = await getFeeAmount('create');
+      action = 'create';
+    } else if (isEditMode) {
+      fee = await getFeeAmount('saveEdit');
+      action = 'saveEdit';
+    } else {
+      fee = await getFeeAmount('save');
+      action = 'save';
+    }
+    
+    if (localError) return; // If there was an error getting fee, stop here
+    
+    setCurrentFee(fee);
+    setCurrentAction(action);
+    setFeeDialogOpen(true);
+  };
 
+  // Handle confirming the save
+  const handleConfirmSave = async () => {
+    setFeeDialogOpen(false);
+    
     try {
-      setSaving(true);
-      setErrorMessage('');
-      
-      if (!id) {
-        // Creating a new note
-        await createNote(title);
-        navigate('/notes');
-      } else if (editMode) {
-        // Saving edits
-        await saveEditedNote(parseInt(id), title, content);
-        setEditMode(false);
+      if (isNewNote) {
+        // Create a new note
+        const noteId = await createNote(title);
+        if (noteId) {
+          // Save the content
+          await saveNote(noteId, content);
+          setSnackbarMessage('Note created successfully');
+          setSnackbarOpen(true);
+          navigate(`/notes/${noteId}`);
+        } else {
+          setLocalError('Failed to create note');
+        }
+      } else if (isEditMode) {
+        // Save edited note with new title and content
+        const success = await saveEditedNote(id, title, content);
+        if (success) {
+          setIsEditMode(false);
+          setSnackbarMessage('Note updated successfully');
+          setSnackbarOpen(true);
+        } else {
+          setLocalError('Failed to update note');
+        }
       } else {
-        // Just saving content
-        await saveNote(parseInt(id), content);
+        // Just save the content
+        const success = await saveNote(id, content);
+        if (success) {
+          setSnackbarMessage('Note saved successfully');
+          setSnackbarOpen(true);
+        } else {
+          setLocalError('Failed to save note');
+        }
       }
-    } catch (error) {
-      console.error('Error saving note:', error);
-      setErrorMessage(error.message || 'Failed to save note');
-    } finally {
-      setSaving(false);
+    } catch (err) {
+      console.error('Error saving note:', err);
+      setLocalError(`Error: ${err.message || 'Unknown error'}`);
     }
   };
 
-  const handleStartEdit = async () => {
+  // Handle deleting the note
+  const handleDeleteClick = () => {
+    setDeleteDialogOpen(true);
+  };
+  
+  const handleConfirmDelete = async () => {
     try {
-      setSaving(true);
-      setErrorMessage('');
-      await startEditNote(parseInt(id));
-      setEditMode(true);
-    } catch (error) {
-      console.error('Error starting edit:', error);
-      setErrorMessage(error.message || 'Failed to enter edit mode');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (window.confirm('Are you sure you want to delete this note?')) {
-      try {
-        setSaving(true);
-        setErrorMessage('');
-        await deleteNote(parseInt(id));
+      const success = await deleteNote(id);
+      if (success) {
+        setDeleteDialogOpen(false);
+        setSnackbarMessage('Note deleted successfully');
+        setSnackbarOpen(true);
         navigate('/notes');
-      } catch (error) {
-        console.error('Error deleting note:', error);
-        setErrorMessage(error.message || 'Failed to delete note');
-      } finally {
-        setSaving(false);
+      } else {
+        setLocalError('Failed to delete note');
       }
+    } catch (err) {
+      setLocalError(`Error: ${err.message || 'Unknown error'}`);
     }
   };
 
-  const handleBack = () => {
-    navigate('/notes');
+  // Handle closing snackbar
+  const handleCloseSnackbar = () => {
+    setSnackbarOpen(false);
   };
 
-  const isNew = !id;
-  const pageTitle = isNew ? 'Create New Note' : (editMode ? 'Edit Note' : 'View Note');
-  const actionText = isNew ? 'Create' : (editMode ? 'Save Changes' : 'Save');
+  // Handle back button
+  const handleBack = () => {
+    navigate(-1);
+  };
+  
+  // Clear local error
+  const handleClearError = () => {
+    setLocalError(null);
+  };
 
   return (
     <Box sx={{ pt: 4 }}>
@@ -218,12 +296,12 @@ export default function NoteEditor() {
             component="h1" 
             sx={{ color: '#fff', fontWeight: 'bold' }}
           >
-            {pageTitle}
+            {isNewNote ? 'Create New Note' : (isEditMode ? 'Edit Note' : 'View Note')}
           </Typography>
         </Box>
         
         <Box>
-          {!isNew && !editMode && !viewOnly && (
+          {!isNewNote && !isEditMode && !viewOnly && (
             <Button
               variant="outlined"
               color="primary"
@@ -235,36 +313,40 @@ export default function NoteEditor() {
             </Button>
           )}
           
-          {!isNew && !viewOnly && (
+          {!isNewNote && !viewOnly && (
             <Button
               variant="outlined"
               color="error"
               startIcon={<DeleteIcon />}
-              onClick={handleDelete}
+              onClick={handleDeleteClick}
               sx={{ mr: 2, borderColor: '#d32f2f', borderRadius: 2 }}
             >
               Delete
             </Button>
           )}
           
-          {(isNew || editMode) && !viewOnly && (
+          {(isNewNote || isEditMode) && !viewOnly && (
             <Button
               variant="contained"
               color="primary"
-              startIcon={saving ? <CircularProgress size={24} color="inherit" /> : <SaveIcon />}
+              startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
               onClick={handleSave}
-              disabled={saving || (isNew && !title) || (!isNew && !editMode && content === notes.find(n => n.id === parseInt(id))?.content)}
+              disabled={loading}
               sx={{ borderRadius: 2 }}
             >
-              {saving ? 'Processing...' : actionText}
+              {loading ? 'Processing...' : 'Save'}
             </Button>
           )}
         </Box>
       </Box>
       
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
+      {displayError && (
+        <Alert 
+          severity="error" 
+          sx={{ mb: 3 }}
+          onClose={handleClearError}
+        >
+          {displayError}
         </Alert>
       )}
       
@@ -282,8 +364,8 @@ export default function NoteEditor() {
           label="Title"
           variant="outlined"
           value={title}
-          onChange={handleTitleChange}
-          disabled={!isNew && !editMode || saving}
+          onChange={(e) => setTitle(e.target.value)}
+          disabled={!isEditMode && !isNewNote || viewOnly || loading}
           sx={{ 
             mb: 3,
             '& .MuiOutlinedInput-root': {
@@ -316,57 +398,104 @@ export default function NoteEditor() {
           <ReactQuill
             theme="snow"
             value={content}
-            onChange={handleContentChange}
+            onChange={setContent}
             modules={quillModules}
             formats={quillFormats}
-            readOnly={!editMode && !isNew || viewOnly}
+            readOnly={!isEditMode && !isNewNote || viewOnly || loading}
           />
         </Box>
       </Paper>
       
-      <Box sx={{ mt: 4 }}>
-        <Divider>
-          <Chip 
-            icon={<InfoIcon />} 
-            label="Transaction Fees" 
-            variant="outlined" 
-          />
-        </Divider>
-        
-        <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 2 }}>
-          <Tooltip title="Fee for creating a new note">
-            <Chip 
-              label={`Create: ${formatFee('0.00001')}`}
-              variant="outlined"
-              color="primary"
-            />
-          </Tooltip>
-          
-          <Tooltip title="Fee for saving content">
-            <Chip 
-              label={`Save: ${formatFee('0.00001')}`}
-              variant="outlined"
-              color="primary"
-            />
-          </Tooltip>
-          
-          <Tooltip title="Fee for starting edit mode">
-            <Chip 
-              label={`Edit: ${formatFee('0.00001')}`} 
-              variant="outlined"
-              color="primary"
-            />
-          </Tooltip>
-          
-          <Tooltip title="Fee for saving edited note">
-            <Chip 
-              label={`Save Edits: ${formatFee('0.00001')}`}
-              variant="outlined"
-              color="primary"
-            />
-          </Tooltip>
-        </Box>
-      </Box>
+      {/* Fee confirmation dialog */}
+      <Dialog
+        open={feeDialogOpen}
+        onClose={() => setFeeDialogOpen(false)}
+        PaperProps={{
+          sx: {
+            backgroundColor: '#282828',
+            color: '#fff',
+            border: '1px solid #333',
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: '#90caf9' }}>Confirm Transaction</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ color: '#ddd' }}>
+            This action requires a fee of {currentFee} ETH to be paid.
+            {currentAction === 'create' && ' This fee is for creating a new note.'}
+            {currentAction === 'save' && ' This fee is for saving note content.'}
+            {currentAction === 'edit' && ' This fee is for entering edit mode.'}
+            {currentAction === 'saveEdit' && ' This fee is for saving the edited note.'}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setFeeDialogOpen(false)} sx={{ color: '#bbb' }}>Cancel</Button>
+          <Button 
+            onClick={currentAction === 'edit' ? handleConfirmEdit : handleConfirmSave} 
+            variant="contained" 
+            color="primary"
+            disabled={loading}
+          >
+            {loading ? <CircularProgress size={24} /> : 'Pay & Continue'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        PaperProps={{
+          sx: {
+            backgroundColor: '#282828',
+            color: '#fff',
+            border: '1px solid #333',
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: '#f44336' }}>Delete Note</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ color: '#ddd' }}>
+            Are you sure you want to delete this note? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)} sx={{ color: '#bbb' }}>Cancel</Button>
+          <Button 
+            onClick={handleConfirmDelete} 
+            color="error" 
+            variant="contained"
+            disabled={loading}
+          >
+            {loading ? <CircularProgress size={24} /> : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Backdrop for loading state */}
+      <Backdrop
+        sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}
+        open={loading && !feeDialogOpen && !deleteDialogOpen}
+      >
+        <CircularProgress color="inherit" />
+      </Backdrop>
+      
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        message={snackbarMessage}
+        action={
+          <IconButton
+            size="small"
+            color="inherit"
+            onClick={handleCloseSnackbar}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        }
+      />
     </Box>
   );
 } 

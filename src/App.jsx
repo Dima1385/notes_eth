@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { Box, Container, Alert, Paper, Typography, Button } from '@mui/material'
+import { Box, Container, Alert, AlertTitle, Paper, Typography, Button, CircularProgress } from '@mui/material'
 import { useWeb3 } from './contexts/Web3Context'
 import Sidebar from './components/Sidebar'
 import ConnectWallet from './components/ConnectWallet'
@@ -9,8 +9,19 @@ import Notes from './pages/Notes'
 import NoteEditor from './pages/NoteEditor'
 
 function App() {
-  const { account, error, isContractValid } = useWeb3();
+  const { 
+    account, 
+    error, 
+    isContractValid, 
+    clearError,
+    requiredNetwork,
+    handleSwitchNetwork,
+    loading
+  } = useWeb3();
 
+  // Handle showing contract error - only show if there's no other error
+  const showContractError = !isContractValid && !error;
+  
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       {account ? (
@@ -18,7 +29,8 @@ function App() {
           <Sidebar />
           <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
             <Container maxWidth="xl">
-              {!isContractValid && (
+              {/* Show contract error only if it's the only error */}
+              {showContractError && (
                 <Alert 
                   severity="error" 
                   variant="filled" 
@@ -32,12 +44,23 @@ function App() {
                     }
                   }}
                 >
-                  <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 1 }}>
-                    Smart Contract Not Accessible
-                  </Typography>
+                  <AlertTitle>Smart Contract Not Accessible</AlertTitle>
                   <Typography variant="body2" sx={{ mb: 2 }}>
                     The Notes contract could not be found on this network. Please switch to a network where the contract is deployed.
                   </Typography>
+                  {requiredNetwork && (
+                    <Button 
+                      variant="outlined" 
+                      size="small" 
+                      color="inherit" 
+                      onClick={handleSwitchNetwork}
+                      startIcon={loading ? <CircularProgress size={16} color="inherit" /> : null}
+                      disabled={loading}
+                      sx={{ mr: 2, mt: 1 }}
+                    >
+                      {loading ? 'Switching...' : `Switch to ${requiredNetwork.name}`}
+                    </Button>
+                  )}
                   <Button 
                     variant="outlined" 
                     size="small" 
@@ -50,8 +73,14 @@ function App() {
                 </Alert>
               )}
 
+              {/* Show Web3 error only if there is one */}
               {error && (
-                <Alert severity="error" sx={{ mb: 3 }}>
+                <Alert 
+                  severity="error" 
+                  sx={{ mb: 3 }}
+                  onClose={clearError}
+                >
+                  <AlertTitle>Error</AlertTitle>
                   {error}
                 </Alert>
               )}

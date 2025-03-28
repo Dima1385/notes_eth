@@ -7,7 +7,7 @@ const NotesContext = createContext();
 export const useNotes = () => useContext(NotesContext);
 
 export const NotesProvider = ({ children }) => {
-  const { notesContract, account, signer, isContractValid } = useWeb3();
+  const { notesContract, account, signer, isContractValid, error: web3Error } = useWeb3();
   
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -22,7 +22,8 @@ export const NotesProvider = ({ children }) => {
   const loadNotes = async () => {
     if (!notesContract || !account || !isContractValid) {
       if (!isContractValid) {
-        setError('Contract is not accessible. Please check your network connection.');
+        // Don't set error if contract is invalid, let Web3Context handle it
+        return;
       }
       return;
     }
@@ -279,6 +280,13 @@ export const NotesProvider = ({ children }) => {
       setNotes([]);
     }
   }, [account, notesContract, isContractValid]);
+  
+  // Clear notes error when web3Error appears to avoid duplicate errors
+  useEffect(() => {
+    if (web3Error) {
+      clearError();
+    }
+  }, [web3Error]);
 
   return (
     <NotesContext.Provider

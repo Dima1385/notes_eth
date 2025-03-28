@@ -1,177 +1,244 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import { 
-  Box, 
   Typography, 
-  Grid, 
-  Card, 
-  CardContent, 
-  CardActions, 
+  Box, 
   Button, 
-  CircularProgress, 
-  Alert, 
+  Grid, 
   Paper, 
   Divider,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
+  TextField,
+  InputAdornment,
+  CircularProgress,
+  Card,
+  CardContent,
+  CardActionArea,
+  Alert,
   IconButton
 } from '@mui/material';
 import { 
-  Add as AddIcon, 
-  Edit as EditIcon, 
-  Delete as DeleteIcon, 
-  Visibility as ViewIcon 
+  NoteAdd as NoteAddIcon, 
+  Search as SearchIcon,
+  SortByAlpha as SortIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { useNotes } from '../contexts/NotesContext';
 import { useWeb3 } from '../contexts/Web3Context';
+import NoteCard from '../components/NoteCard';
 
 export default function Notes() {
-  const { notes, loading, error: notesError, deleteNote, loadUserNotes, clearError } = useNotes();
+  const { notes, loading, error: notesError, loadNotes, clearError } = useNotes();
   const { error: web3Error, isContractValid } = useWeb3();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
   const [localError, setLocalError] = useState(null);
   
-  // Use only one error source - prioritize local errors, then notes errors, then web3 errors
-  const error = localError || (isContractValid ? notesError : null) || (isContractValid ? web3Error : null);
+  // Determine which error to display (priority: local error, notes error, web3 error if contract is valid)
+  const displayError = localError || notesError || (isContractValid ? web3Error : null);
   
-  // Clear errors when component unmounts
+  // Clean up errors when component unmounts
   useEffect(() => {
     return () => {
-      clearError();
+      if (clearError) clearError();
       setLocalError(null);
     };
   }, [clearError]);
-  
-  const handleDelete = async (id, event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    
-    if (window.confirm('Are you sure you want to delete this note?')) {
+
+  // Load notes on mount
+  useEffect(() => {
+    const fetchNotes = async () => {
       try {
-        await deleteNote(id);
+        await loadNotes();
       } catch (err) {
-        setLocalError(`Failed to delete note: ${err.message || 'Unknown error'}`);
+        setLocalError(`Failed to load notes: ${err.message || 'Unknown error'}`);
       }
+    };
+    
+    if (isContractValid) {
+      fetchNotes();
     }
+  }, [loadNotes, isContractValid]);
+
+  // Filter notes based on search term
+  const filteredNotes = notes.filter(note => 
+    note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    note.content.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+  
+  // Sort notes by title
+  const sortedNotes = [...filteredNotes].sort((a, b) => {
+    if (sortOrder === 'asc') {
+      return a.title.localeCompare(b.title);
+    } else {
+      return b.title.localeCompare(a.title);
+    }
+  });
+  
+  const toggleSortOrder = () => {
+    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
   };
   
+  // Clear error handler
+  const handleClearError = () => {
+    setLocalError(null);
+    if (clearError) clearError();
+  };
+  
+  // Don't show notes page at all if contract is invalid
   if (!isContractValid) {
-    return null; // Don't show notes if contract is not valid - App.jsx will show appropriate message
-  }
-
-  if (loading && notes.length === 0) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', pt: 6 }}>
-        <CircularProgress />
-      </Box>
-    );
+    return null; // Let the main App component handle this case
   }
 
   return (
-    <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" component="h2">
-          Your Notes
+    <Box sx={{ pt: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Typography variant="h4" component="h1" sx={{ color: '#fff', fontWeight: 'bold' }}>
+          My Notes
         </Typography>
-        
-        <Button
-          component={Link}
-          to="/notes/new"
-          variant="contained"
-          color="primary"
-          startIcon={<AddIcon />}
-          sx={{ borderRadius: 2 }}
+        <Button 
+          component={RouterLink} 
+          to="/notes/new" 
+          variant="contained" 
+          startIcon={<NoteAddIcon />}
+          sx={{ 
+            borderRadius: 2,
+            textTransform: 'none',
+            fontWeight: 'bold'
+          }}
         >
           New Note
         </Button>
       </Box>
       
-      {error && (
+      {displayError && (
         <Alert 
           severity="error" 
           sx={{ mb: 3 }}
-          onClose={() => setLocalError(null)}
+          action={
+            <IconButton
+              aria-label="close"
+              color="inherit"
+              size="small"
+              onClick={handleClearError}
+            >
+              <CloseIcon fontSize="inherit" />
+            </IconButton>
+          }
         >
-          {error}
+          {displayError}
         </Alert>
       )}
       
-      {notes.length === 0 ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
-          <Typography variant="body1" color="textSecondary" sx={{ mb: 2 }}>
-            You don't have any notes yet
-          </Typography>
-          <Button
-            component={Link}
-            to="/notes/new"
+      <Paper 
+        elevation={3} 
+        sx={{ 
+          p: 3, 
+          mb: 4,
+          backgroundColor: '#1e1e1e',
+          borderRadius: 2,
+          border: '1px solid #333'
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <TextField
+            fullWidth
             variant="outlined"
-            color="primary"
-            startIcon={<AddIcon />}
+            placeholder="Search notes..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ color: '#999' }} />
+                </InputAdornment>
+              ),
+              sx: { 
+                backgroundColor: '#252525', 
+                borderRadius: 2,
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#444',
+                },
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#666',
+                },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#90caf9',
+                },
+                color: '#fff'
+              }
+            }}
+          />
+          <Button 
+            variant="outlined" 
+            onClick={toggleSortOrder}
+            startIcon={<SortIcon />}
+            sx={{ 
+              minWidth: 130, 
+              height: 56, 
+              borderColor: '#444',
+              color: '#90caf9',
+              borderRadius: 2,
+              '&:hover': {
+                borderColor: '#666',
+                backgroundColor: '#252525'
+              }
+            }}
           >
-            Create Your First Note
+            Sort {sortOrder === 'asc' ? 'A-Z' : 'Z-A'}
           </Button>
         </Box>
+      </Paper>
+      
+      {loading && notes.length === 0 ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+          <CircularProgress />
+        </Box>
       ) : (
-        <List sx={{ width: '100%' }}>
-          {notes.map((note) => (
-            <React.Fragment key={note.id}>
-              <ListItem 
-                component={Link} 
-                to={`/notes/${note.id}`}
-                sx={{ 
-                  textDecoration: 'none', 
-                  color: 'inherit',
-                  '&:hover': {
-                    backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                  },
-                  borderRadius: 1,
-                  mb: 1
-                }}
-              >
-                <ListItemText
-                  primary={note.title}
-                  secondary={note.content ? note.content.substring(0, 60) + (note.content.length > 60 ? '...' : '') : 'No content'}
-                />
-                <ListItemSecondaryAction>
-                  <IconButton 
-                    component={Link} 
-                    to={`/notes/${note.id}`}
-                    color="primary" 
-                    aria-label="view"
-                  >
-                    <ViewIcon />
-                  </IconButton>
-                  <IconButton 
-                    component={Link} 
-                    to={`/notes/${note.id}`}
-                    state={{ edit: true }}
-                    color="secondary" 
-                    aria-label="edit"
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton 
-                    edge="end" 
-                    aria-label="delete"
-                    onClick={(e) => handleDelete(note.id, e)}
-                    color="error"
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </ListItemSecondaryAction>
-              </ListItem>
-              <Divider />
-            </React.Fragment>
-          ))}
-        </List>
+        <>
+          {sortedNotes.length > 0 ? (
+            <Grid container spacing={3}>
+              {sortedNotes.map(note => (
+                <Grid item xs={12} sm={6} md={4} key={note.id}>
+                  <NoteCard note={note} />
+                </Grid>
+              ))}
+            </Grid>
+          ) : (
+            <Card sx={{ backgroundColor: '#252525', border: '1px dashed #444' }}>
+              <CardActionArea component={RouterLink} to="/notes/new">
+                <CardContent sx={{ textAlign: 'center', py: 6 }}>
+                  <NoteAddIcon sx={{ fontSize: 80, color: '#666', mb: 2 }} />
+                  {searchTerm ? (
+                    <>
+                      <Typography variant="h6" component="p" sx={{ color: '#bbb' }}>
+                        No notes match your search
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#999', mt: 1 }}>
+                        Try a different search term or clear the search
+                      </Typography>
+                    </>
+                  ) : (
+                    <>
+                      <Typography variant="h6" component="p" sx={{ color: '#bbb' }}>
+                        You don't have any notes yet
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#999', mt: 1 }}>
+                        Click here to create your first note
+                      </Typography>
+                    </>
+                  )}
+                </CardContent>
+              </CardActionArea>
+            </Card>
+          )}
+        </>
       )}
       
       {loading && notes.length > 0 && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
           <CircularProgress size={24} />
         </Box>
       )}
-    </Paper>
+    </Box>
   );
 } 
