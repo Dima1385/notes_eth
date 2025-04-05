@@ -17,10 +17,8 @@ export default function ConnectWallet() {
   const [walletType, setWalletType] = useState('metamask');
   const [localError, setLocalError] = useState(null);
   
-  // Determine which error to display (prioritize local over context error)
   const displayError = localError || error;
   
-  // Clear errors when component unmounts
   useEffect(() => {
     return () => {
       if (clearError) clearError();

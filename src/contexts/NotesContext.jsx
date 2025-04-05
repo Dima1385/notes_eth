@@ -13,16 +13,13 @@ export const NotesProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Clear error message
   const clearError = () => {
     setError(null);
   };
 
-  // Load user's notes
   const loadNotes = async () => {
     if (!notesContract || !account || !isContractValid) {
       if (!isContractValid) {
-        // Don't set error if contract is invalid, let Web3Context handle it
         return;
       }
       return;
@@ -32,10 +29,8 @@ export const NotesProvider = ({ children }) => {
       setLoading(true);
       clearError();
       
-      // Get note IDs from contract
       const noteIds = await notesContract.getUserNotes();
       
-      // Get note details for each ID
       const notesData = await Promise.all(
         noteIds.map(async (id) => {
           try {
@@ -52,7 +47,6 @@ export const NotesProvider = ({ children }) => {
         })
       );
       
-      // Filter out any null values from failed fetches
       setNotes(notesData.filter(note => note !== null));
       setLoading(false);
     } catch (err) {
@@ -62,7 +56,6 @@ export const NotesProvider = ({ children }) => {
     }
   };
 
-  // Create a new note
   const createNote = async (title) => {
     if (!notesContract || !signer || !isContractValid) {
       setError('Contract is not accessible. Please check your network connection.');
@@ -73,7 +66,6 @@ export const NotesProvider = ({ children }) => {
       setLoading(true);
       clearError();
       
-      // Get the fee amount from the contract
       let createFee;
       try {
         createFee = await notesContract.createNoteFee();
@@ -84,18 +76,14 @@ export const NotesProvider = ({ children }) => {
         return null;
       }
       
-      // Send transaction to create note
       const tx = await notesContract.createNote(title, { value: createFee });
       
-      // Wait for transaction to be mined
       const receipt = await tx.wait();
       
-      // Find the NoteCreated event
       const event = receipt.events.find(e => e.event === 'NoteCreated');
       if (event) {
         const noteId = event.args.noteId.toString();
         
-        // Add the new note to state
         const newNote = {
           id: noteId,
           title,
@@ -117,7 +105,6 @@ export const NotesProvider = ({ children }) => {
     }
   };
 
-  // Save note content
   const saveNote = async (noteId, content) => {
     if (!notesContract || !signer || !isContractValid) {
       setError('Contract is not accessible. Please check your network connection.');
@@ -128,7 +115,6 @@ export const NotesProvider = ({ children }) => {
       setLoading(true);
       clearError();
       
-      // Get the fee amount from the contract
       let saveFee;
       try {
         saveFee = await notesContract.saveNoteFee();
@@ -139,13 +125,10 @@ export const NotesProvider = ({ children }) => {
         return false;
       }
       
-      // Send transaction to save note
       const tx = await notesContract.saveNote(noteId, content, { value: saveFee });
       
-      // Wait for transaction to be mined
       await tx.wait();
       
-      // Update note in state
       setNotes(prevNotes => 
         prevNotes.map(note => 
           note.id === noteId ? { ...note, content } : note
@@ -162,7 +145,6 @@ export const NotesProvider = ({ children }) => {
     }
   };
 
-  // Start editing a note
   const startEditNote = async (noteId) => {
     if (!notesContract || !signer || !isContractValid) {
       setError('Contract is not accessible. Please check your network connection.');
@@ -173,7 +155,6 @@ export const NotesProvider = ({ children }) => {
       setLoading(true);
       clearError();
       
-      // Get the fee amount from the contract
       let editFee;
       try {
         editFee = await notesContract.editNoteFee();
@@ -184,10 +165,8 @@ export const NotesProvider = ({ children }) => {
         return false;
       }
       
-      // Send transaction to start editing
       const tx = await notesContract.startEditNote(noteId, { value: editFee });
       
-      // Wait for transaction to be mined
       await tx.wait();
       
       setLoading(false);
@@ -200,7 +179,6 @@ export const NotesProvider = ({ children }) => {
     }
   };
 
-  // Save edited note
   const saveEditedNote = async (noteId, title, content) => {
     if (!notesContract || !signer || !isContractValid) {
       setError('Contract is not accessible. Please check your network connection.');
@@ -211,7 +189,6 @@ export const NotesProvider = ({ children }) => {
       setLoading(true);
       clearError();
       
-      // Get the fee amount from the contract
       let saveEditFee;
       try {
         saveEditFee = await notesContract.saveEditFee();
@@ -222,13 +199,10 @@ export const NotesProvider = ({ children }) => {
         return false;
       }
       
-      // Send transaction to save edit
       const tx = await notesContract.saveEditedNote(noteId, title, content, { value: saveEditFee });
       
-      // Wait for transaction to be mined
       await tx.wait();
       
-      // Update note in state
       setNotes(prevNotes => 
         prevNotes.map(note => 
           note.id === noteId ? { ...note, title, content } : note
@@ -245,7 +219,6 @@ export const NotesProvider = ({ children }) => {
     }
   };
 
-  // Delete a note
   const deleteNote = async (noteId) => {
     if (!notesContract || !signer) return false;
     
@@ -253,13 +226,10 @@ export const NotesProvider = ({ children }) => {
       setLoading(true);
       clearError();
       
-      // Send transaction to delete note
       const tx = await notesContract.deleteNote(noteId);
       
-      // Wait for transaction to be mined
       await tx.wait();
       
-      // Remove note from state
       setNotes(prevNotes => prevNotes.filter(note => note.id !== noteId));
       
       setLoading(false);
@@ -272,7 +242,6 @@ export const NotesProvider = ({ children }) => {
     }
   };
 
-  // Load notes when account or contract changes
   useEffect(() => {
     if (account && notesContract && isContractValid) {
       loadNotes();
@@ -281,7 +250,6 @@ export const NotesProvider = ({ children }) => {
     }
   }, [account, notesContract, isContractValid]);
   
-  // Clear notes error when web3Error appears to avoid duplicate errors
   useEffect(() => {
     if (web3Error) {
       clearError();

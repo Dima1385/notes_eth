@@ -30,13 +30,11 @@ export default function Notes() {
   const { notes, loading, error: notesError, loadNotes, clearError } = useNotes();
   const { error: web3Error, isContractValid } = useWeb3();
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
+  const [sortOrder, setSortOrder] = useState('asc');
   const [localError, setLocalError] = useState(null);
   
-  // Determine which error to display (priority: local error, notes error, web3 error if contract is valid)
   const displayError = localError || notesError || (isContractValid ? web3Error : null);
   
-  // Clean up errors when component unmounts
   useEffect(() => {
     return () => {
       if (clearError) clearError();
@@ -44,7 +42,6 @@ export default function Notes() {
     };
   }, [clearError]);
 
-  // Load notes on mount
   useEffect(() => {
     const fetchNotes = async () => {
       try {
@@ -59,13 +56,11 @@ export default function Notes() {
     }
   }, [loadNotes, isContractValid]);
 
-  // Filter notes based on search term
   const filteredNotes = notes.filter(note => 
     note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     note.content.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
-  // Sort notes by title
   const sortedNotes = [...filteredNotes].sort((a, b) => {
     if (sortOrder === 'asc') {
       return a.title.localeCompare(b.title);
@@ -78,15 +73,13 @@ export default function Notes() {
     setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
   };
   
-  // Clear error handler
   const handleClearError = () => {
     setLocalError(null);
     if (clearError) clearError();
   };
   
-  // Don't show notes page at all if contract is invalid
   if (!isContractValid) {
-    return null; // Let the main App component handle this case
+    return null;
   }
 
   return (

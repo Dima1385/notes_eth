@@ -19,7 +19,6 @@ function App() {
     loading
   } = useWeb3();
 
-  // Handle showing contract error - only show if there's no other error
   const showContractError = !isContractValid && !error;
   
   return (
@@ -29,7 +28,6 @@ function App() {
           <Sidebar />
           <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
             <Container maxWidth="xl">
-              {/* Show contract error only if it's the only error */}
               {showContractError && (
                 <Alert 
                   severity="error" 
@@ -73,7 +71,6 @@ function App() {
                 </Alert>
               )}
 
-              {/* Show Web3 error only if there is one */}
               {error && (
                 <Alert 
                   severity="error" 
